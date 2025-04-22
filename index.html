@@ -1,0 +1,154 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="bg-gray-100">
+    <!-- Navbar -->
+    <nav class="bg-blue-600 p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-white text-2xl font-bold">Expense Tracker</h1>
+            <div class="flex items-center space-x-4">
+                <span class="text-white">Welcome, {{ user_name }}</span>
+                <a href="/logout" id="logoutBtn" class="text-white hover:text-gray-200">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-4">
+        <!-- Expense Form -->
+        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+            <h2 class="text-xl font-semibold mb-4">Add Expense</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input type="number" id="amount" placeholder="Amount" class="border p-2 rounded" step="0.01">
+                <select id="category" class="border p-2 rounded">
+                    <option value="Food">Food</option>
+                    <option value="Transport">Transport</option>
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Bills">Bills</option>
+                    <option value="Others">Others</option>
+                </select>
+                <div class="relative">
+                    <input type="date" id="date" class="border p-2 rounded w-full" title="Select any date for the expense" required>
+                    <span class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-gray-500">
+                        📅
+                    </span>
+                </div>
+                <input type="text" id="description" placeholder="Description" class="border p-2 rounded">
+            </div>
+            <button onclick="addExpense()" class="mt-4 bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Add Expense</button>
+        </div>
+        
+        <!-- Period Selector -->
+        <div class="mb-6">
+            <label for="period" class="mr-2">View:</label>
+            <select id="period" onchange="fetchExpenses()" class="border p-2 rounded">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+                <option value="lifetime">Lifetime</option>
+            </select>
+        </div>
+        
+        <!-- Charts -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Category Distribution</h2>
+                <canvas id="pieChart"></canvas>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Expense Trend</h2>
+                <canvas id="barChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Expense List -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold mb-4">Expenses</h2>
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="p-2">Date</th>
+                        <th class="p-2">Amount</th>
+                        <th class="p-2">Category</th>
+                        <th class="p-2">Description</th>
+                        <th class="p-2">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="expenseList"></tbody>
+            </table>
+        </div>
+        
+        <!-- Edit Modal -->
+        <div id="editModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center">
+            <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+                <h2 class="text-xl font-semibold mb-4">Edit Expense</h2>
+                <input type="hidden" id="editId">
+                <div class="grid grid-cols-1 gap-4">
+                    <input type="number" id="editAmount" placeholder="Amount" class="border p-2 rounded" step="0.01">
+                    <select id="editCategory" class="border p-2 rounded">
+                        <option value="Food">Food</option>
+                        <option value="Transport">Transport</option>
+                        <option value="Entertainment">Entertainment</option>
+                        <option value="Bills">Bills</option>
+                        <option value="Others">Others</option>
+                    </select>
+                    <input type="date" id="editDate" class="border p-2 rounded" required>
+                    <input type="text" id="editDescription" placeholder="Description" class="border p-2 rounded">
+                </div>
+                <div class="mt-4 flex justify-end space-x-2">
+                    <button onclick="closeEditModal()" class="bg-gray-500 text-white p-2 rounded hover:bg-gray-600">Cancel</button>
+                    <button onclick="updateExpense()" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
