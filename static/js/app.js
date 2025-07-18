@@ -13,7 +13,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         // Initialize expenses if on the main page
         if (document.getElementById('expenseList')) {
             fetchExpenses();
-            setInterval(fetchExpenses, 5000); // Poll every 5 seconds for updates
+            setInterval(fetchExpenses, 300000); // Poll every 30 seconds for updates
         }
     });
 
