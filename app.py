@@ -5,6 +5,11 @@ from datetime import datetime, timedelta
 import socket
 import bcrypt
 
+
+
+
+
+
 app = Flask(__name__)
 app.secret_key = 'your-secret-key'  # Replace with a secure random key in production
 login_manager = LoginManager()
